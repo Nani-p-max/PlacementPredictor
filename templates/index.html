@@ -1,0 +1,1186 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="Placement Prediction ML Dashboard — interactive pipeline">
+  <title>
+    {% if active == 'data-loading' %}Data Loading
+    {% elif active == 'preprocessing' %}Preprocessing
+    {% elif active == 'eda' %}EDA
+    {% elif active == 'linear-regression' %}Linear Regression
+    {% elif active == 'logistic-regression' %}Logistic Regression
+    {% else %}Home{% endif %} | ML Dashboard
+  </title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+  <style>
+    /* ── Control Panel ───────────────────────────────────────── */
+    .ctrl-panel {
+      background: var(--glass);
+      border: 1px solid var(--glass-border);
+      border-radius: var(--radius);
+      padding: 20px 24px;
+      margin-bottom: 24px;
+    }
+    .ctrl-row {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      flex-wrap: wrap;
+    }
+    .ctrl-group {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+    .ctrl-label {
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 1px;
+      text-transform: uppercase;
+      color: var(--text-3);
+    }
+    .ctrl-select {
+      background: var(--bg-elevated);
+      border: 1px solid var(--glass-border);
+      border-radius: var(--radius-sm);
+      color: var(--text-1);
+      font-family: 'Inter', sans-serif;
+      font-size: 13px;
+      font-weight: 500;
+      padding: 9px 14px;
+      cursor: pointer;
+      min-width: 160px;
+      outline: none;
+      transition: var(--transition);
+      appearance: none;
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%2394a3b8' stroke-width='1.5' fill='none' stroke-linecap='round'/%3E%3C/svg%3E");
+      background-repeat: no-repeat;
+      background-position: right 12px center;
+      padding-right: 36px;
+    }
+    .ctrl-select:hover, .ctrl-select:focus {
+      border-color: var(--purple-l);
+      box-shadow: 0 0 0 2px rgba(124,58,237,0.2);
+    }
+    .ctrl-select option { background: #12123a; }
+
+    /* viz-type pills */
+    .viz-pills {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+    .viz-pill {
+      padding: 8px 16px;
+      border-radius: 20px;
+      border: 1px solid var(--glass-border);
+      background: var(--bg-elevated);
+      color: var(--text-2);
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: var(--transition);
+      white-space: nowrap;
+    }
+    .viz-pill:hover {
+      border-color: rgba(124,58,237,0.5);
+      color: var(--text-1);
+    }
+    .viz-pill.active {
+      background: linear-gradient(135deg, rgba(124,58,237,0.3), rgba(6,182,212,0.2));
+      border-color: rgba(124,58,237,0.6);
+      color: var(--text-1);
+    }
+
+    .param-panels > div { display: none; }
+    .param-panels > div.visible { display: flex; gap: 16px; flex-wrap: wrap; }
+
+    /* ── Tabs (for regression sections) ─────────────────────── */
+    .tab-nav {
+      display: flex;
+      gap: 4px;
+      border-bottom: 1px solid var(--glass-border);
+      margin-bottom: 24px;
+    }
+    .tab-btn {
+      padding: 10px 20px;
+      border-radius: 8px 8px 0 0;
+      border: 1px solid transparent;
+      border-bottom: none;
+      background: transparent;
+      color: var(--text-3);
+      font-family: 'Inter', sans-serif;
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: var(--transition);
+      margin-bottom: -1px;
+      position: relative;
+    }
+    .tab-btn:hover { color: var(--text-2); background: var(--glass); }
+    .tab-btn.active {
+      color: var(--text-1);
+      background: var(--glass);
+      border-color: var(--glass-border);
+      border-bottom-color: var(--bg-base);
+    }
+    .tab-btn.active::after {
+      content: '';
+      position: absolute;
+      bottom: -2px; left: 0; right: 0;
+      height: 2px;
+      background: var(--grad-header);
+    }
+
+    .tab-content { display: none; }
+    .tab-content.active { display: block; }
+
+    /* ── Big chart card ──────────────────────────────────────── */
+    .main-chart-card {
+      background: var(--glass);
+      border: 1px solid var(--glass-border);
+      border-radius: var(--radius);
+      padding: 28px;
+    }
+    .main-chart-header {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      margin-bottom: 20px;
+    }
+    .main-chart-title { font-size: 16px; font-weight: 700; color: var(--text-1); }
+    .main-chart-sub { font-size: 12px; color: var(--text-3); margin-top: 4px; }
+    .chart-wrap-xl { position: relative; height: 420px; }
+  </style>
+</head>
+<body>
+<div class="app">
+
+<!-- ════════════════════════════════════════════════════════
+     SIDEBAR
+════════════════════════════════════════════════════════ -->
+<aside class="sidebar">
+  <div class="sidebar-brand">
+    <div class="sidebar-logo">🎓 ML Pipeline</div>
+    <div class="sidebar-title">Placement Prediction</div>
+    <div class="sidebar-subtitle">50,000 Student Records</div>
+  </div>
+
+  <nav class="sidebar-nav">
+    <div class="nav-label">Pipeline Stages</div>
+    <a href="{{ url_for('home') }}"
+       class="nav-item {% if active == 'home' %}active{% endif %}">
+      <span class="nav-icon">🏠</span> Home
+    </a>
+    <a href="{{ url_for('data_loading') }}"
+       class="nav-item {% if active == 'data-loading' %}active{% endif %}">
+      <span class="nav-step">1</span>
+      <span class="nav-icon">📂</span> Data Loading
+    </a>
+    <a href="{{ url_for('preprocessing') }}"
+       class="nav-item {% if active == 'preprocessing' %}active{% endif %}">
+      <span class="nav-step">2</span>
+      <span class="nav-icon">🔧</span> Preprocessing
+    </a>
+    <a href="{{ url_for('eda') }}"
+       class="nav-item {% if active == 'eda' %}active{% endif %}">
+      <span class="nav-step">3</span>
+      <span class="nav-icon">📊</span> EDA
+    </a>
+    <a href="{{ url_for('linear_regression') }}"
+       class="nav-item {% if active == 'linear-regression' %}active{% endif %}">
+      <span class="nav-step">4</span>
+      <span class="nav-icon">📈</span> Linear Regression
+    </a>
+    <a href="{{ url_for('logistic_regression') }}"
+       class="nav-item {% if active == 'logistic-regression' %}active{% endif %}">
+      <span class="nav-step">5</span>
+      <span class="nav-icon">🎯</span> Logistic Regression
+    </a>
+  </nav>
+
+  <div class="sidebar-footer">Flask · scikit-learn · Chart.js</div>
+</aside>
+
+
+<!-- ════════════════════════════════════════════════════════
+     MAIN
+════════════════════════════════════════════════════════ -->
+<main class="main">
+
+{% if error %}
+<div class="page-header">
+  <div class="error-banner">⚠️ {{ error }}</div>
+</div>
+{% endif %}
+
+
+<!-- ════════════════════════════════════════════════════
+     HOME
+═══════════════════════════════════════════════════════ -->
+{% if active == 'home' %}
+<div class="content">
+  <div class="home-hero">
+    <div class="home-glow">🎓</div>
+    <h1 class="home-title">Placement Prediction<br>ML Dashboard</h1>
+    <p class="home-subtitle">
+      An end-to-end machine learning pipeline on 50,000 student records.
+      Explore data interactively, preprocess features and train models.
+    </p>
+    <div class="pipeline-steps">
+      <a href="{{ url_for('data_loading') }}" class="pipeline-step">📂 Data Loading</a>
+      <span class="pipeline-arrow">→</span>
+      <a href="{{ url_for('preprocessing') }}" class="pipeline-step">🔧 Preprocessing</a>
+      <span class="pipeline-arrow">→</span>
+      <a href="{{ url_for('eda') }}" class="pipeline-step">📊 EDA</a>
+      <span class="pipeline-arrow">→</span>
+      <a href="{{ url_for('linear_regression') }}" class="pipeline-step">📈 Linear Regression</a>
+      <span class="pipeline-arrow">→</span>
+      <a href="{{ url_for('logistic_regression') }}" class="pipeline-step">🎯 Logistic Regression</a>
+    </div>
+    <a href="{{ url_for('data_loading') }}" class="start-btn">🚀 Start Pipeline</a>
+  </div>
+</div>
+{% endif %}
+
+
+<!-- ════════════════════════════════════════════════════
+     1 — DATA LOADING
+═══════════════════════════════════════════════════════ -->
+{% if active == 'data-loading' and data %}
+<div class="page-header">
+  <div class="page-header-left">
+    <div class="page-breadcrumb">Stage 1 of 5</div>
+    <h1 class="page-title">📂 Data <span>Loading</span></h1>
+    <p class="page-desc">Raw dataset overview — shape, column types, missing values and a live preview.</p>
+  </div>
+  <div class="page-badge">placement_predict_50k Dataset.csv</div>
+</div>
+
+<div class="content">
+  <div class="section-title">Dataset Overview</div>
+  <div class="metrics-grid">
+    <div class="metric-card purple">
+      <div class="metric-icon">📋</div>
+      <div class="metric-label">Total Rows</div>
+      <div class="metric-value">{{ "{:,}".format(data.n_rows) }}</div>
+    </div>
+    <div class="metric-card cyan">
+      <div class="metric-icon">🗂️</div>
+      <div class="metric-label">Total Columns</div>
+      <div class="metric-value">{{ data.n_cols }}</div>
+    </div>
+    <div class="metric-card green">
+      <div class="metric-icon">🔢</div>
+      <div class="metric-label">Numeric Cols</div>
+      <div class="metric-value">{{ data.numeric_cols | length }}</div>
+    </div>
+    <div class="metric-card amber">
+      <div class="metric-icon">🔤</div>
+      <div class="metric-label">Categorical Cols</div>
+      <div class="metric-value">{{ data.cat_cols | length }}</div>
+    </div>
+    <div class="metric-card red">
+      <div class="metric-icon">❓</div>
+      <div class="metric-label">Cols w/ Missing</div>
+      <div class="metric-value">{{ data.missing_counts.values() | select('>', 0) | list | length }}</div>
+    </div>
+  </div>
+
+  <div class="section-title mt-6">Column Information</div>
+  <div class="table-card">
+    <div class="table-scroll">
+      <table>
+        <thead>
+          <tr><th>#</th><th>Column Name</th><th>Data Type</th><th>Missing</th><th>Missing %</th><th>Category</th></tr>
+        </thead>
+        <tbody>
+          {% for col in data.columns %}
+          <tr>
+            <td class="text-3">{{ loop.index }}</td>
+            <td class="td-name">{{ col }}</td>
+            <td><span class="tag {% if 'int' in data.dtypes[col] or 'float' in data.dtypes[col] %}tag-cyan{% else %}tag-amber{% endif %}">{{ data.dtypes[col] }}</span></td>
+            <td class="{% if data.missing_counts[col] > 0 %}text-red{% else %}text-green{% endif %}">{{ data.missing_counts[col] }}</td>
+            <td class="{% if data.missing_pct[col] > 0 %}text-amber{% else %}text-green{% endif %}">{{ data.missing_pct[col] }}%</td>
+            <td>
+              {% if col in data.numeric_cols %}<span class="tag tag-cyan">numeric</span>
+              {% else %}<span class="tag tag-amber">categorical</span>{% endif %}
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="section-title mt-8">Data Preview (First 10 Rows)</div>
+  <div class="table-card">
+    <div class="table-scroll">
+      <table>
+        <thead><tr>{% for col in data.columns %}<th>{{ col }}</th>{% endfor %}</tr></thead>
+        <tbody>
+          {% for row in data.preview %}
+          <tr>{% for col in data.columns %}<td>{{ row[col] }}</td>{% endfor %}</tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+{% endif %}
+
+
+<!-- ════════════════════════════════════════════════════
+     2 — PREPROCESSING
+═══════════════════════════════════════════════════════ -->
+{% if active == 'preprocessing' and data %}
+<div class="page-header">
+  <div class="page-header-left">
+    <div class="page-breadcrumb">Stage 2 of 5</div>
+    <h1 class="page-title">🔧 Data <span>Preprocessing</span></h1>
+    <p class="page-desc">Clean, impute, encode and scale the raw dataset for model training.</p>
+  </div>
+</div>
+
+<div class="content">
+  <div class="section-title">Pipeline Steps</div>
+  <div class="steps-list">
+    {% for step in data.steps %}
+    <div class="step-card">
+      <div class="step-icon">{{ step.icon }}</div>
+      <div class="step-body">
+        <div class="step-title">{{ loop.index }}. {{ step.title }}</div>
+        <div class="step-detail">{{ step.detail }}</div>
+      </div>
+      <div class="step-badge">✓ {{ step.badge }}</div>
+    </div>
+    {% endfor %}
+  </div>
+
+  {% if data.missing_before %}
+  <div class="section-title mt-8">Missing Value Imputation Report</div>
+  <div class="table-card">
+    <div class="table-scroll">
+      <table>
+        <thead><tr><th>Column</th><th>Missing Before</th><th>Missing After</th><th>Status</th></tr></thead>
+        <tbody>
+          {% for col, count in data.missing_before.items() %}
+          <tr>
+            <td class="td-name">{{ col }}</td>
+            <td class="text-red">{{ count }}</td>
+            <td class="text-green">{{ data.missing_after.get(col, 0) }}</td>
+            <td><span class="tag tag-green">✓ Fixed</span></td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+  {% endif %}
+
+  <div class="section-title mt-8">Label Encoding Maps</div>
+  <div class="encode-grid">
+    {% for col, mapping in data.encoding_maps.items() %}
+    <div class="encode-card">
+      <div class="encode-header">{{ col }}</div>
+      <div class="encode-body">
+        {% for val, code in mapping.items() %}
+        <div class="encode-row">
+          <span class="encode-key">{{ val }}</span>
+          <span class="encode-val">→ {{ code }}</span>
+        </div>
+        {% endfor %}
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+
+  {% if data.scaled_preview %}
+  <div class="section-title mt-8">Scaled Feature Preview (5 rows after StandardScaler)</div>
+  <div class="table-card">
+    <div class="table-scroll">
+      <table>
+        <thead><tr>{% for col in data.scaled_preview_cols %}<th>{{ col }}</th>{% endfor %}</tr></thead>
+        <tbody>
+          {% for row in data.scaled_preview %}
+          <tr>{% for col in data.scaled_preview_cols %}<td>{{ row[col] }}</td>{% endfor %}</tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+  {% endif %}
+</div>
+{% endif %}
+
+
+<!-- ════════════════════════════════════════════════════
+     3 — EDA  (Interactive Control Panel)
+═══════════════════════════════════════════════════════ -->
+{% if active == 'eda' and data %}
+<div class="page-header">
+  <div class="page-header-left">
+    <div class="page-breadcrumb">Stage 3 of 5</div>
+    <h1 class="page-title">📊 Exploratory <span>Data Analysis</span></h1>
+    <p class="page-desc">Select a visualization type and configure its parameters below.</p>
+  </div>
+  <div class="page-badge">{{ data.placement_rate }}% placement rate</div>
+</div>
+
+<div class="content">
+  <!-- KPI strip -->
+  <div class="metrics-grid">
+    <div class="metric-card purple">
+      <div class="metric-icon">👩‍🎓</div>
+      <div class="metric-label">Total Students</div>
+      <div class="metric-value">{{ "{:,}".format(data.total_students) }}</div>
+    </div>
+    <div class="metric-card green">
+      <div class="metric-icon">✅</div>
+      <div class="metric-label">Placed</div>
+      <div class="metric-value">{{ "{:,}".format(data.placed_count) }}</div>
+    </div>
+    <div class="metric-card red">
+      <div class="metric-icon">❌</div>
+      <div class="metric-label">Not Placed</div>
+      <div class="metric-value">{{ "{:,}".format(data.total_students - data.placed_count) }}</div>
+    </div>
+    <div class="metric-card cyan">
+      <div class="metric-icon">📈</div>
+      <div class="metric-label">Placement Rate</div>
+      <div class="metric-value">{{ data.placement_rate }}%</div>
+    </div>
+  </div>
+
+  <!-- ── Control Panel ──────────────────────────────────────── -->
+  <div class="section-title mt-6">Visualization Explorer</div>
+
+  <div class="ctrl-panel">
+    <!-- Viz type pills -->
+    <div class="ctrl-row mb-4">
+      <div class="ctrl-group" style="flex:1">
+        <div class="ctrl-label">Visualization Type</div>
+        <div class="viz-pills" id="vizPills">
+          <button class="viz-pill active" data-viz="distribution" onclick="selectViz('distribution')">📊 Distribution</button>
+          <button class="viz-pill" data-viz="scatter"      onclick="selectViz('scatter')">🔵 Scatter Plot</button>
+          <button class="viz-pill" data-viz="categorical"  onclick="selectViz('categorical')">📋 Categorical</button>
+          <button class="viz-pill" data-viz="correlation"  onclick="selectViz('correlation')">🌡️ Correlation</button>
+          <button class="viz-pill" data-viz="placement"    onclick="selectViz('placement')">🎯 Placement Dist.</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Dynamic parameter panels -->
+    <div class="param-panels" id="paramPanels">
+
+      <!-- Distribution params -->
+      <div id="params-distribution" class="visible">
+        <div class="ctrl-group">
+          <div class="ctrl-label">Feature</div>
+          <select class="ctrl-select" id="distFeature" onchange="updateChart()">
+            {% for feat in data.hist_features %}
+            <option value="{{ feat }}">{{ feat }}</option>
+            {% endfor %}
+          </select>
+        </div>
+      </div>
+
+      <!-- Scatter params -->
+      <div id="params-scatter">
+        <div class="ctrl-group">
+          <div class="ctrl-label">X Axis</div>
+          <select class="ctrl-select" id="scatterX" onchange="updateChart()">
+            {% for feat in data.scatter_features %}
+            <option value="{{ feat }}" {% if feat == 'CGPA' %}selected{% endif %}>{{ feat }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="ctrl-group">
+          <div class="ctrl-label">Y Axis</div>
+          <select class="ctrl-select" id="scatterY" onchange="updateChart()">
+            {% for feat in data.scatter_features %}
+            <option value="{{ feat }}" {% if feat == 'Salary Package' %}selected{% endif %}>{{ feat }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="ctrl-group">
+          <div class="ctrl-label">Colour By</div>
+          <select class="ctrl-select" id="scatterColor" onchange="updateChart()">
+            <option value="none">None</option>
+            <option value="PlacementStatus" selected>Placement Status</option>
+          </select>
+        </div>
+      </div>
+
+      <!-- Categorical params -->
+      <div id="params-categorical">
+        <div class="ctrl-group">
+          <div class="ctrl-label">Category Field</div>
+          <select class="ctrl-select" id="catField" onchange="updateChart()">
+            {% for cat in data.cat_fields %}
+            <option value="{{ cat }}">{{ cat }}</option>
+            {% endfor %}
+          </select>
+        </div>
+      </div>
+
+      <!-- Correlation / Placement — no params needed -->
+      <div id="params-correlation"></div>
+      <div id="params-placement"></div>
+    </div>
+  </div>
+
+  <!-- ── Chart Display ──────────────────────────────────────── -->
+  <div class="main-chart-card">
+    <div class="main-chart-header">
+      <div>
+        <div class="main-chart-title" id="chartTitle">Feature Distribution</div>
+        <div class="main-chart-sub"  id="chartSub">Histogram of CGPA across all students</div>
+      </div>
+    </div>
+    <!-- canvas: used for all charts except correlation -->
+    <div class="chart-wrap-xl" id="canvasWrap">
+      <canvas id="mainChart"></canvas>
+    </div>
+    <!-- heatmap: shown only for correlation -->
+    <div id="heatmapWrap" style="display:none; overflow-x:auto;"></div>
+  </div>
+
+  <!-- Statistics table (always visible) -->
+  <div class="section-title mt-6">Descriptive Statistics</div>
+  <div class="table-card">
+    <div class="table-scroll">
+      <table>
+        <thead>
+          <tr><th>Feature</th><th>Mean</th><th>Std Dev</th><th>Min</th><th>Median</th><th>Max</th></tr>
+        </thead>
+        <tbody>
+          {% for row in data.stats_rows %}
+          <tr>
+            <td class="td-name">{{ row.feature }}</td>
+            <td>{{ row.mean }}</td>
+            <td>{{ row.std }}</td>
+            <td class="text-red">{{ row.min }}</td>
+            <td class="text-cyan">{{ row.median }}</td>
+            <td class="text-green">{{ row.max }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<!-- EDA JavaScript -->
+<script>
+const EDA = {
+  placementDist:    {{ data.placement_dist | tojson }},
+  scatterData:      {{ data.scatter_data   | tojson }},
+  scatterFeatures:  {{ data.scatter_features | tojson }},
+  distributions:    {{ data.distributions  | tojson }},
+  histFeatures:     {{ data.hist_features  | tojson }},
+  catAnalysis:      {{ data.cat_analysis   | tojson }},
+  catFields:        {{ data.cat_fields     | tojson }},
+  correlation:      {{ data.correlation    | tojson }},
+};
+
+Chart.defaults.color = '#94a3b8';
+Chart.defaults.borderColor = 'rgba(255,255,255,0.06)';
+
+let activeViz = 'distribution';
+let mainChart  = null;
+
+function selectViz(viz) {
+  activeViz = viz;
+  // update pill styles
+  document.querySelectorAll('.viz-pill').forEach(p => {
+    p.classList.toggle('active', p.dataset.viz === viz);
+  });
+  // show correct param panel
+  document.querySelectorAll('.param-panels > div').forEach(d => d.classList.remove('visible'));
+  const panel = document.getElementById('params-' + viz);
+  if (panel) panel.classList.add('visible');
+  updateChart();
+}
+
+function updateChart() {
+  if (mainChart) { mainChart.destroy(); mainChart = null; }
+
+  const canvasWrap  = document.getElementById('canvasWrap');
+  const heatmapWrap = document.getElementById('heatmapWrap');
+  const title       = document.getElementById('chartTitle');
+  const sub         = document.getElementById('chartSub');
+
+  // toggle heatmap vs canvas
+  if (activeViz === 'correlation') {
+    canvasWrap.style.display  = 'none';
+    heatmapWrap.style.display = 'block';
+    title.textContent = 'Pearson Correlation Matrix';
+    sub.textContent   = 'Top 13 features by |correlation| with Salary Package';
+    renderHeatmap();
+    return;
+  }
+  canvasWrap.style.display  = 'block';
+  heatmapWrap.style.display = 'none';
+
+  const ctx = document.getElementById('mainChart').getContext('2d');
+
+  if (activeViz === 'distribution') {
+    const feat = document.getElementById('distFeature').value;
+    const d    = EDA.distributions[feat];
+    title.textContent = `${feat} — Distribution`;
+    sub.textContent   = `Frequency histogram across all students (25 bins)`;
+    mainChart = new Chart(ctx, {
+      type: 'bar',
+      data: {
+        labels: d.bins,
+        datasets: [{ data: d.counts, backgroundColor: 'rgba(168,85,247,0.7)',
+          borderColor: '#a855f7', borderWidth: 1, borderRadius: 4, barPercentage: 0.95 }]
+      },
+      options: {
+        responsive: true, maintainAspectRatio: false,
+        plugins: { legend: { display: false } },
+        scales: {
+          x: { ticks: { maxTicksLimit: 8, font: { size: 11 } }, grid: { display: false },
+               title: { display: true, text: feat, color: '#94a3b8' } },
+          y: { grid: { color: 'rgba(255,255,255,0.05)' },
+               title: { display: true, text: 'Count', color: '#94a3b8' } }
+        }
+      }
+    });
+
+  } else if (activeViz === 'scatter') {
+    const xKey     = document.getElementById('scatterX').value;
+    const yKey     = document.getElementById('scatterY').value;
+    const colorBy  = document.getElementById('scatterColor').value;
+    title.textContent = `${xKey}  vs  ${yKey}`;
+    sub.textContent   = `${EDA.scatterData[xKey].length} random samples`;
+
+    let datasets;
+    if (colorBy === 'PlacementStatus') {
+      const placed = [], notPlaced = [];
+      EDA.scatterData.PlacementStatus.forEach((s, i) => {
+        const pt = { x: EDA.scatterData[xKey][i], y: EDA.scatterData[yKey][i] };
+        if (s === 1) placed.push(pt); else notPlaced.push(pt);
+      });
+      datasets = [
+        { label: 'Placed',     data: placed,    backgroundColor: 'rgba(16,185,129,0.6)',  borderColor: '#10b981', pointRadius: 4, pointHoverRadius: 7 },
+        { label: 'Not Placed', data: notPlaced, backgroundColor: 'rgba(239,68,68,0.55)',  borderColor: '#ef4444', pointRadius: 4, pointHoverRadius: 7 },
+      ];
+    } else {
+      datasets = [{
+        label: 'Students',
+        data: EDA.scatterData[xKey].map((x, i) => ({ x, y: EDA.scatterData[yKey][i] })),
+        backgroundColor: 'rgba(168,85,247,0.6)', borderColor: '#a855f7', pointRadius: 4, pointHoverRadius: 7,
+      }];
+    }
+    mainChart = new Chart(ctx, {
+      type: 'scatter',
+      data: { datasets },
+      options: {
+        responsive: true, maintainAspectRatio: false,
+        plugins: { legend: { position: 'bottom' } },
+        scales: {
+          x: { title: { display: true, text: xKey, color: '#94a3b8' }, grid: { color: 'rgba(255,255,255,0.05)' } },
+          y: { title: { display: true, text: yKey, color: '#94a3b8' }, grid: { color: 'rgba(255,255,255,0.05)' } }
+        }
+      }
+    });
+
+  } else if (activeViz === 'categorical') {
+    const cat = document.getElementById('catField').value;
+    const d   = EDA.catAnalysis[cat];
+    title.textContent = `${cat}  →  Placement Rate`;
+    sub.textContent   = `Average placement rate (%) by ${cat}`;
+    const palette = ['rgba(168,85,247,0.8)','rgba(6,182,212,0.8)','rgba(16,185,129,0.8)','rgba(245,158,11,0.8)','rgba(239,68,68,0.8)','rgba(99,102,241,0.8)'];
+    mainChart = new Chart(ctx, {
+      type: 'bar',
+      data: {
+        labels: d.labels,
+        datasets: [{
+          label: 'Placement Rate (%)',
+          data: d.placement_rates,
+          backgroundColor: d.labels.map((_, i) => palette[i % palette.length]),
+          borderRadius: 8, barPercentage: 0.55,
+        }]
+      },
+      options: {
+        responsive: true, maintainAspectRatio: false,
+        plugins: { legend: { display: false } },
+        scales: {
+          y: { beginAtZero: true, max: 100, grid: { color: 'rgba(255,255,255,0.05)' },
+               title: { display: true, text: 'Placement Rate (%)', color: '#94a3b8' } },
+          x: { grid: { display: false } }
+        }
+      }
+    });
+
+  } else if (activeViz === 'placement') {
+    title.textContent = 'Placement Status Distribution';
+    sub.textContent   = `Placed vs Not-Placed out of ${EDA.placementDist.values.reduce((a,b)=>a+b,0).toLocaleString()} students`;
+    mainChart = new Chart(ctx, {
+      type: 'doughnut',
+      data: {
+        labels: EDA.placementDist.labels,
+        datasets: [{ data: EDA.placementDist.values,
+          backgroundColor: ['rgba(239,68,68,0.85)', 'rgba(16,185,129,0.85)'],
+          borderColor: ['#ef4444','#10b981'], borderWidth: 2, hoverOffset: 16 }]
+      },
+      options: {
+        responsive: true, maintainAspectRatio: false,
+        cutout: '62%',
+        plugins: { legend: { position: 'bottom', labels: { padding: 24, font: { size: 13 } } },
+          tooltip: { callbacks: { label: c => ` ${c.label}: ${c.parsed.toLocaleString()}` } } }
+      }
+    });
+  }
+}
+
+function renderHeatmap() {
+  const labels = EDA.correlation.labels;
+  const matrix = EDA.correlation.matrix;
+  let html = '<table class="heatmap-table"><thead><tr><th></th>';
+  labels.forEach(l => { html += `<th title="${l}">${l.length > 9 ? l.slice(0,8)+'…' : l}</th>`; });
+  html += '</tr></thead><tbody>';
+  matrix.forEach((row, i) => {
+    html += `<tr><td class="heatmap-label">${labels[i]}</td>`;
+    row.forEach((val, j) => {
+      const v = parseFloat(val);
+      const a = Math.min(Math.abs(v), 1);
+      const bg = v > 0 ? `rgba(16,185,129,${0.1 + a*0.8})` : `rgba(239,68,68,${0.1 + a*0.8})`;
+      const fc = a > 0.45 ? '#fff' : '#94a3b8';
+      html += `<td style="background:${bg};color:${fc}" title="${labels[i]} ↔ ${labels[j]}: ${v.toFixed(3)}">${v.toFixed(2)}</td>`;
+    });
+    html += '</tr>';
+  });
+  html += '</tbody></table>';
+  document.getElementById('heatmapWrap').innerHTML = html;
+}
+
+// initial render
+updateChart();
+</script>
+{% endif %}
+
+
+<!-- ════════════════════════════════════════════════════
+     4 — LINEAR REGRESSION  (Tab-based)
+═══════════════════════════════════════════════════════ -->
+{% if active == 'linear-regression' and data %}
+<div class="page-header">
+  <div class="page-header-left">
+    <div class="page-breadcrumb">Stage 4 of 5</div>
+    <h1 class="page-title">📈 Linear <span>Regression</span></h1>
+    <p class="page-desc">Predict <strong>Salary Package</strong> for placed students using 9 academic &amp; skill features.</p>
+  </div>
+  <div class="page-badge">Target: Salary Package (LPA)</div>
+</div>
+
+<div class="content">
+  <!-- Tab Navigation -->
+  <div class="tab-nav">
+    <button class="tab-btn active" onclick="switchLRTab('metrics',this)">📊 Performance Metrics</button>
+    <button class="tab-btn" onclick="switchLRTab('scatter',this)">🎯 Actual vs Predicted</button>
+    <button class="tab-btn" onclick="switchLRTab('coefficients',this)">📉 Feature Coefficients</button>
+  </div>
+
+  <!-- Tab: Metrics -->
+  <div id="lr-tab-metrics" class="tab-content active">
+    <div class="metrics-grid">
+      <div class="metric-card purple">
+        <div class="metric-icon">📐</div>
+        <div class="metric-label">R² Score</div>
+        <div class="metric-value">{{ data.metrics.r2 }}</div>
+        <div class="card-sub">Variance explained</div>
+      </div>
+      <div class="metric-card amber">
+        <div class="metric-icon">📏</div>
+        <div class="metric-label">MAE</div>
+        <div class="metric-value">{{ data.metrics.mae }}</div>
+        <div class="card-sub">Mean Absolute Error (LPA)</div>
+      </div>
+      <div class="metric-card red">
+        <div class="metric-icon">⚡</div>
+        <div class="metric-label">RMSE</div>
+        <div class="metric-value">{{ data.metrics.rmse }}</div>
+        <div class="card-sub">Root Mean Sq. Error</div>
+      </div>
+      <div class="metric-card cyan">
+        <div class="metric-icon">🏋️</div>
+        <div class="metric-label">Train Samples</div>
+        <div class="metric-value">{{ "{:,}".format(data.n_train) }}</div>
+      </div>
+      <div class="metric-card green">
+        <div class="metric-icon">🧪</div>
+        <div class="metric-label">Test Samples</div>
+        <div class="metric-value">{{ "{:,}".format(data.n_test) }}</div>
+      </div>
+    </div>
+
+    <div class="card mt-6">
+      <div class="card-title">Model Intercept</div>
+      <div style="margin-top:8px;font-family:'JetBrains Mono',monospace;font-size:15px;color:#a855f7;">
+        β₀ = {{ data.intercept }}
+      </div>
+      <div class="card-sub" style="margin-top:4px;">
+        Salary Package (LPA) = β₀ + Σ(βᵢ × scaled_featureᵢ)
+      </div>
+    </div>
+
+    <!-- Coefficient table -->
+    <div class="section-title mt-6">Coefficient Table</div>
+    <div class="table-card">
+      <div class="table-scroll">
+        <table>
+          <thead><tr><th>Rank</th><th>Feature</th><th>Coefficient (β)</th><th>Direction</th></tr></thead>
+          <tbody>
+            {% for feat, coef in data.coefficients.items() %}
+            <tr>
+              <td class="text-3">{{ loop.index }}</td>
+              <td class="td-name">{{ feat }}</td>
+              <td class="{% if coef >= 0 %}text-green{% else %}text-red{% endif %}">{{ coef }}</td>
+              <td>
+                {% if coef >= 0 %}<span class="tag tag-green">↑ Positive</span>
+                {% else %}<span class="tag tag-red">↓ Negative</span>{% endif %}
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- Tab: Actual vs Predicted -->
+  <div id="lr-tab-scatter" class="tab-content">
+    <div class="main-chart-card">
+      <div class="main-chart-header">
+        <div>
+          <div class="main-chart-title">Actual vs Predicted Salary Package</div>
+          <div class="main-chart-sub">300 random test samples — dashed line = perfect fit</div>
+        </div>
+      </div>
+      <div class="chart-wrap-xl"><canvas id="lrScatterChart"></canvas></div>
+    </div>
+  </div>
+
+  <!-- Tab: Coefficients -->
+  <div id="lr-tab-coefficients" class="tab-content">
+    <div class="main-chart-card">
+      <div class="main-chart-header">
+        <div>
+          <div class="main-chart-title">Feature Coefficients</div>
+          <div class="main-chart-sub">After StandardScaler — magnitude reflects influence on Salary Package</div>
+        </div>
+      </div>
+      <div class="chart-wrap-xl"><canvas id="lrCoeffChart"></canvas></div>
+    </div>
+  </div>
+</div>
+
+<!-- LR JavaScript -->
+<script>
+const LR = {
+  scatter:     {{ data.scatter      | tojson }},
+  coefLabels:  {{ data.coef_labels  | tojson }},
+  coefValues:  {{ data.coef_values  | tojson }},
+};
+Chart.defaults.color = '#94a3b8';
+Chart.defaults.borderColor = 'rgba(255,255,255,0.06)';
+
+let lrScatterChart = null, lrCoeffChart = null;
+
+function switchLRTab(tab, btn) {
+  document.querySelectorAll('[id^="lr-tab-"]').forEach(d => d.classList.remove('active'));
+  document.querySelectorAll('.tab-nav .tab-btn').forEach(b => b.classList.remove('active'));
+  document.getElementById('lr-tab-' + tab).classList.add('active');
+  btn.classList.add('active');
+
+  if (tab === 'scatter' && !lrScatterChart) {
+    const ctx = document.getElementById('lrScatterChart').getContext('2d');
+    const minV = Math.min(...LR.scatter.actual, ...LR.scatter.predicted);
+    const maxV = Math.max(...LR.scatter.actual, ...LR.scatter.predicted);
+    lrScatterChart = new Chart(ctx, {
+      type: 'scatter',
+      data: {
+        datasets: [
+          { label: 'Actual vs Predicted',
+            data: LR.scatter.actual.map((a,i) => ({ x: a, y: LR.scatter.predicted[i] })),
+            backgroundColor: 'rgba(168,85,247,0.55)', borderColor: '#a855f7',
+            pointRadius: 4, pointHoverRadius: 8 },
+          { label: 'Perfect Fit',
+            data: [{ x: minV, y: minV }, { x: maxV, y: maxV }],
+            type: 'line', borderColor: '#22d3ee', borderWidth: 2,
+            borderDash: [7,4], pointRadius: 0, backgroundColor: 'transparent' }
+        ]
+      },
+      options: {
+        responsive: true, maintainAspectRatio: false,
+        plugins: { legend: { position: 'bottom' } },
+        scales: {
+          x: { title: { display: true, text: 'Actual Salary (LPA)', color: '#94a3b8' }, grid: { color: 'rgba(255,255,255,0.05)' } },
+          y: { title: { display: true, text: 'Predicted Salary (LPA)', color: '#94a3b8' }, grid: { color: 'rgba(255,255,255,0.05)' } }
+        }
+      }
+    });
+  }
+  if (tab === 'coefficients' && !lrCoeffChart) {
+    const ctx = document.getElementById('lrCoeffChart').getContext('2d');
+    lrCoeffChart = new Chart(ctx, {
+      type: 'bar',
+      data: {
+        labels: LR.coefLabels,
+        datasets: [{
+          label: 'Coefficient (β)',
+          data: LR.coefValues,
+          backgroundColor: LR.coefValues.map(v => v >= 0 ? 'rgba(16,185,129,0.8)' : 'rgba(239,68,68,0.8)'),
+          borderColor:     LR.coefValues.map(v => v >= 0 ? '#10b981' : '#ef4444'),
+          borderWidth: 1, borderRadius: 6,
+        }]
+      },
+      options: {
+        indexAxis: 'y', responsive: true, maintainAspectRatio: false,
+        plugins: { legend: { display: false } },
+        scales: {
+          x: { grid: { color: 'rgba(255,255,255,0.05)' }, title: { display: true, text: 'Coefficient value', color: '#94a3b8' } },
+          y: { grid: { display: false }, ticks: { font: { size: 12 } } }
+        }
+      }
+    });
+  }
+}
+</script>
+{% endif %}
+
+
+<!-- ════════════════════════════════════════════════════
+     5 — LOGISTIC REGRESSION  (Tab-based)
+═══════════════════════════════════════════════════════ -->
+{% if active == 'logistic-regression' and data %}
+<div class="page-header">
+  <div class="page-header-left">
+    <div class="page-breadcrumb">Stage 5 of 5</div>
+    <h1 class="page-title">🎯 Logistic <span>Regression</span></h1>
+    <p class="page-desc">Classify whether a student will be <strong>Placed</strong> or <strong>Not Placed</strong>.</p>
+  </div>
+  <div class="page-badge">Target: PlacementStatus (Binary)</div>
+</div>
+
+<div class="content">
+  <!-- Tab Navigation -->
+  <div class="tab-nav">
+    <button class="tab-btn active" onclick="switchLogTab('metrics',this)">📊 Metrics</button>
+    <button class="tab-btn" onclick="switchLogTab('confusion',this)">🔲 Confusion Matrix</button>
+    <button class="tab-btn" onclick="switchLogTab('roc',this)">📈 ROC Curve</button>
+    <button class="tab-btn" onclick="switchLogTab('importance',this)">🏆 Feature Importance</button>
+  </div>
+
+  <!-- Tab: Metrics -->
+  <div id="log-tab-metrics" class="tab-content active">
+    <div class="metrics-grid">
+      <div class="metric-card green">
+        <div class="metric-icon">🎯</div>
+        <div class="metric-label">Accuracy</div>
+        <div class="metric-value">{{ (data.metrics.accuracy * 100) | round(2) }}%</div>
+      </div>
+      <div class="metric-card purple">
+        <div class="metric-icon">🔍</div>
+        <div class="metric-label">Precision</div>
+        <div class="metric-value">{{ (data.metrics.precision * 100) | round(2) }}%</div>
+      </div>
+      <div class="metric-card cyan">
+        <div class="metric-icon">📡</div>
+        <div class="metric-label">Recall</div>
+        <div class="metric-value">{{ (data.metrics.recall * 100) | round(2) }}%</div>
+      </div>
+      <div class="metric-card amber">
+        <div class="metric-icon">⚖️</div>
+        <div class="metric-label">F1 Score</div>
+        <div class="metric-value">{{ (data.metrics.f1 * 100) | round(2) }}%</div>
+      </div>
+      <div class="metric-card red">
+        <div class="metric-icon">📐</div>
+        <div class="metric-label">ROC-AUC</div>
+        <div class="metric-value">{{ data.metrics.auc }}</div>
+      </div>
+    </div>
+
+    <div class="row mt-6">
+      <div class="metric-card col cyan" style="flex:1">
+        <div class="metric-icon">🏋️</div>
+        <div class="metric-label">Train Samples</div>
+        <div class="metric-value">{{ "{:,}".format(data.n_train) }}</div>
+      </div>
+      <div class="metric-card col purple" style="flex:1">
+        <div class="metric-icon">🧪</div>
+        <div class="metric-label">Test Samples</div>
+        <div class="metric-value">{{ "{:,}".format(data.n_test) }}</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Tab: Confusion Matrix -->
+  <div id="log-tab-confusion" class="tab-content">
+    <div class="main-chart-card">
+      <div class="main-chart-header">
+        <div>
+          <div class="main-chart-title">Confusion Matrix</div>
+          <div class="main-chart-sub">Rows = Actual class · Columns = Predicted class</div>
+        </div>
+      </div>
+      {% set cm = data.confusion_matrix %}
+      <div class="cm-wrap" style="margin-top:32px">
+        <table class="cm-table">
+          <thead>
+            <tr>
+              <td class="cm-label"></td>
+              <td class="cm-label">Pred: Not Placed</td>
+              <td class="cm-label">Pred: Placed</td>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td class="cm-label" style="font-weight:700;color:#f1f5f9;">Act: Not Placed</td>
+              <td class="cm-tn">{{ cm[0][0] }}<span class="cm-sub">True Neg</span></td>
+              <td class="cm-fp">{{ cm[0][1] }}<span class="cm-sub">False Pos</span></td>
+            </tr>
+            <tr>
+              <td class="cm-label" style="font-weight:700;color:#f1f5f9;">Act: Placed</td>
+              <td class="cm-fn">{{ cm[1][0] }}<span class="cm-sub">False Neg</span></td>
+              <td class="cm-tp">{{ cm[1][1] }}<span class="cm-sub">True Pos</span></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- Tab: ROC Curve -->
+  <div id="log-tab-roc" class="tab-content">
+    <div class="main-chart-card">
+      <div class="main-chart-header">
+        <div>
+          <div class="main-chart-title">ROC Curve</div>
+          <div class="main-chart-sub">AUC = {{ data.metrics.auc }} · curve closer to top-left = better classifier</div>
+        </div>
+      </div>
+      <div class="chart-wrap-xl"><canvas id="logROCChart"></canvas></div>
+    </div>
+  </div>
+
+  <!-- Tab: Feature Importance -->
+  <div id="log-tab-importance" class="tab-content">
+    <div class="main-chart-card">
+      <div class="main-chart-header">
+        <div>
+          <div class="main-chart-title">Top-10 Feature Importances</div>
+          <div class="main-chart-sub">Logistic regression coefficients after StandardScaler</div>
+        </div>
+      </div>
+      <div class="chart-wrap-xl"><canvas id="logImpChart"></canvas></div>
+    </div>
+
+    <div class="section-title mt-6">Feature Importance Table</div>
+    <div class="table-card">
+      <div class="table-scroll">
+        <table>
+          <thead><tr><th>Rank</th><th>Feature</th><th>Coefficient</th><th>Impact</th></tr></thead>
+          <tbody>
+            {% for feat, coef in data.top_features.items() %}
+            <tr>
+              <td class="text-3">{{ loop.index }}</td>
+              <td class="td-name">{{ feat }}</td>
+              <td class="{% if coef >= 0 %}text-green{% else %}text-red{% endif %}">{{ coef }}</td>
+              <td>
+                {% if coef > 0.3 %}<span class="tag tag-green">↑ Strong +</span>
+                {% elif coef > 0 %}<span class="tag tag-cyan">↑ Mild +</span>
+                {% elif coef > -0.3 %}<span class="tag tag-amber">↓ Mild −</span>
+                {% else %}<span class="tag tag-red">↓ Strong −</span>{% endif %}
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Logistic JS -->
+<script>
+const LOG = {
+  roc:         {{ data.roc_curve           | tojson }},
+  impLabels:   {{ data.top_feature_labels  | tojson }},
+  impValues:   {{ data.top_feature_values  | tojson }},
+};
+Chart.defaults.color = '#94a3b8';
+Chart.defaults.borderColor = 'rgba(255,255,255,0.06)';
+
+let logROCChart = null, logImpChart = null;
+
+function switchLogTab(tab, btn) {
+  document.querySelectorAll('[id^="log-tab-"]').forEach(d => d.classList.remove('active'));
+  document.querySelectorAll('.tab-nav .tab-btn').forEach(b => b.classList.remove('active'));
+  document.getElementById('log-tab-' + tab).classList.add('active');
+  btn.classList.add('active');
+
+  if (tab === 'roc' && !logROCChart) {
+    const ctx = document.getElementById('logROCChart').getContext('2d');
+    logROCChart = new Chart(ctx, {
+      type: 'line',
+      data: {
+        datasets: [
+          { label: 'ROC Curve',
+            data: LOG.roc.fpr.map((x,i) => ({ x, y: LOG.roc.tpr[i] })),
+            borderColor: '#a855f7', backgroundColor: 'rgba(168,85,247,0.12)',
+            fill: true, tension: 0.3, pointRadius: 0, borderWidth: 2.5 },
+          { label: 'Random Classifier',
+            data: [{ x:0, y:0 }, { x:1, y:1 }],
+            borderColor: '#475569', borderWidth: 2, borderDash: [7,4],
+            pointRadius: 0, backgroundColor: 'transparent' }
+        ]
+      },
+      options: {
+        responsive: true, maintainAspectRatio: false, parsing: false,
+        plugins: { legend: { position: 'bottom' } },
+        scales: {
+          x: { type: 'linear', min: 0, max: 1, title: { display: true, text: 'False Positive Rate', color: '#94a3b8' }, grid: { color: 'rgba(255,255,255,0.05)' } },
+          y: { min: 0, max: 1, title: { display: true, text: 'True Positive Rate', color: '#94a3b8' }, grid: { color: 'rgba(255,255,255,0.05)' } }
+        }
+      }
+    });
+  }
+  if (tab === 'importance' && !logImpChart) {
+    const ctx = document.getElementById('logImpChart').getContext('2d');
+    logImpChart = new Chart(ctx, {
+      type: 'bar',
+      data: {
+        labels: LOG.impLabels,
+        datasets: [{
+          label: 'Coefficient',
+          data: LOG.impValues,
+          backgroundColor: LOG.impValues.map(v => v >= 0 ? 'rgba(16,185,129,0.8)' : 'rgba(239,68,68,0.8)'),
+          borderColor:     LOG.impValues.map(v => v >= 0 ? '#10b981' : '#ef4444'),
+          borderWidth: 1, borderRadius: 6,
+        }]
+      },
+      options: {
+        indexAxis: 'y', responsive: true, maintainAspectRatio: false,
+        plugins: { legend: { display: false } },
+        scales: {
+          x: { grid: { color: 'rgba(255,255,255,0.05)' }, title: { display: true, text: 'Coefficient value', color: '#94a3b8' } },
+          y: { grid: { display: false }, ticks: { font: { size: 12 } } }
+        }
+      }
+    });
+  }
+}
+</script>
+{% endif %}
+
+</main>
+</div>
+</body>
+</html>

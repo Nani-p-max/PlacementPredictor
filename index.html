@@ -1,0 +1,293 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+
+    <meta charset="UTF-8">
+
+    <title>Placement Prediction Project</title>
+
+    <link rel="stylesheet"
+          href="{{ url_for('static', filename='style.css') }}">
+
+</head>
+
+
+<body>
+
+<!-- ========================================================= -->
+<!-- HEADER                                                    -->
+<!-- ========================================================= -->
+
+<header class="topbar">
+
+    <h1>Placement Prediction Project</h1>
+
+</header>
+
+
+<!-- ========================================================= -->
+<!-- MAIN LAYOUT                                               -->
+<!-- ========================================================= -->
+
+<div class="layout">
+
+
+    <!-- ===================================================== -->
+    <!-- LEFT SIDEBAR                                          -->
+    <!-- ===================================================== -->
+
+    <nav class="sidebar">
+
+        <ul>
+
+            <!-- Data Loading -->
+
+            <li>
+
+                <a href="{{ url_for('data_loading') }}"
+                   class="menu-item
+                   {% if active == 'data-loading' %}active{% endif %}">
+
+                    Data Loading
+
+                </a>
+
+            </li>
+
+
+            <!-- Future Sections -->
+
+            <li class="menu-item disabled">
+                Preprocessing (coming soon)
+            </li>
+
+            <li class="menu-item disabled">
+                Model Training (coming soon)
+            </li>
+
+            <li class="menu-item disabled">
+                Prediction (coming soon)
+            </li>
+
+        </ul>
+
+    </nav>
+
+
+
+    <!-- ===================================================== -->
+    <!-- MAIN CONTENT                                          -->
+    <!-- ===================================================== -->
+
+    <main class="content">
+
+
+        <!-- ================================================= -->
+        <!-- HOME PAGE                                         -->
+        <!-- ================================================= -->
+
+        {% if active == 'none' %}
+
+            <h2>Welcome</h2>
+
+            <p>
+                Select an option from the left panel
+                to get started.
+            </p>
+
+        {% endif %}
+
+
+
+        <!-- ================================================= -->
+        <!-- DATA LOADING SECTION                              -->
+        <!-- ================================================= -->
+
+        {% if active == 'data-loading' %}
+
+            <h2>Data Loading</h2>
+
+
+            <!-- ============================================= -->
+            <!-- ERROR MESSAGE                                 -->
+            <!-- ============================================= -->
+
+            {% if error %}
+
+                <div class="error">
+                    {{ error }}
+                </div>
+
+            {% endif %}
+
+
+
+            <!-- ============================================= -->
+            <!-- DATASET SUMMARY                               -->
+            <!-- ============================================= -->
+
+            {% if summary %}
+
+                <h3>Dataset Summary</h3>
+
+
+                <table class="summary-table">
+
+                    <tr>
+
+                        <td>
+                            Number of Rows
+                        </td>
+
+                        <td>
+                            {{ summary.n_rows }}
+                        </td>
+
+                    </tr>
+
+
+                    <tr>
+
+                        <td>
+                            Number of Columns
+                        </td>
+
+                        <td>
+                            {{ summary.n_cols }}
+                        </td>
+
+                    </tr>
+
+
+                    <tr>
+
+
+                    </tr>
+
+                </table>
+
+
+
+                <!-- ========================================= -->
+                <!-- COLUMN INFORMATION                        -->
+                <!-- ========================================= -->
+
+                <h3>Column Information</h3>
+
+
+                <div class="table-wrapper">
+
+                    <table class="data-table">
+
+                        <thead>
+
+                            <tr>
+
+                                <th>Column</th>
+
+                                <th>Data Type</th>
+
+                                <th>Missing Values</th>
+
+                            </tr>
+
+                        </thead>
+
+
+                        <tbody>
+
+                            {% for col in summary.columns %}
+
+                                <tr>
+
+                                    <td>
+                                        {{ col }}
+                                    </td>
+
+                                    <td>
+                                        {{ summary.dtypes[col] }}
+                                    </td>
+
+                                    <td>
+                                        {{ summary.missing_counts[col] }}
+                                    </td>
+
+                                </tr>
+
+                            {% endfor %}
+
+                        </tbody>
+
+                    </table>
+
+                </div>
+
+
+
+                <!-- ========================================= -->
+                <!-- DATA PREVIEW                              -->
+                <!-- ========================================= -->
+
+                <h3>Preview (First 10 Rows)</h3>
+
+
+                <div class="table-wrapper">
+
+                    <table class="data-table">
+
+                        <thead>
+
+                            <tr>
+
+                                {% for col in summary.columns %}
+
+                                    <th>
+                                        {{ col }}
+                                    </th>
+
+                                {% endfor %}
+
+                            </tr>
+
+                        </thead>
+
+
+                        <tbody>
+
+                            {% for row in summary.preview %}
+
+                                <tr>
+
+                                    {% for col in summary.columns %}
+
+                                        <td>
+                                            {{ row[col] }}
+                                        </td>
+
+                                    {% endfor %}
+
+                                </tr>
+
+                            {% endfor %}
+
+                        </tbody>
+
+                    </table>
+
+                </div>
+
+
+            {% endif %}
+
+        {% endif %}
+
+
+    </main>
+
+</div>
+
+
+</body>
+
+</html>
