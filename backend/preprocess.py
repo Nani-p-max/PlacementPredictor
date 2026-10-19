@@ -20,12 +20,13 @@ def get_preprocessing_results() -> dict:
 
     # ── Step 1 : Drop irrelevant columns ──────────────────────────────────────
     DROP_COLS = ["StudentID", "IsAnomaly"]
-    df.drop(columns=DROP_COLS, inplace=True)
+    existing_drops = [c for c in DROP_COLS if c in df.columns]
+    df.drop(columns=existing_drops, inplace=True)
     steps.append({
         "icon":   "🗑️",
         "title":  "Drop Irrelevant Columns",
-        "detail": f"Removed: {', '.join(DROP_COLS)}",
-        "badge":  f"{len(DROP_COLS)} columns removed",
+        "detail": f"Removed: {', '.join(existing_drops) if existing_drops else 'none'}",
+        "badge":  f"{len(existing_drops)} columns removed",
         "status": "success",
     })
 
@@ -41,9 +42,9 @@ def get_preprocessing_results() -> dict:
     cat_cols = df.select_dtypes(include="object").columns.tolist()
 
     for col in num_cols:
-        df[col].fillna(df[col].median(), inplace=True)
+        df[col] = df[col].fillna(df[col].median())
     for col in cat_cols:
-        df[col].fillna(df[col].mode()[0], inplace=True)
+        df[col] = df[col].fillna(df[col].mode()[0])
 
     missing_after = {col: int(df[col].isna().sum()) for col in missing_before}
     total_filled = sum(missing_before.values())

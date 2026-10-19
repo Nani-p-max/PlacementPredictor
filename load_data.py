@@ -1,7 +1,7 @@
 import os
 import pandas as pd
 
-DATA_PATH = r"C:\Second Year\SEM-1\ML\Placement Prediction\placement_predict_50k Dataset.csv"
+DATA_PATH = r"/placement_predict_50k Dataset.csv"
 
 
 def load_data(path: str = DATA_PATH) -> pd.DataFrame:

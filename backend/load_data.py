@@ -17,7 +17,26 @@ def load_data(path: str = DATA_PATH) -> pd.DataFrame:
     """Read the raw CSV and return a DataFrame."""
     if not os.path.exists(path):
         raise FileNotFoundError(f"Dataset not found at: {path}")
-    return pd.read_csv(path)
+
+    df = pd.read_csv(path)
+    if "PlacementStatus" in df.columns:
+        status = df["PlacementStatus"]
+        if status.dtype == "object":
+            normalized = status.astype(str).str.strip().str.lower()
+            labels = {
+                "0": 0, "false": 0, "no": 0, "not placed": 0,
+                "1": 1, "true": 1, "yes": 1, "placed": 1,
+            }
+            encoded = normalized.map(labels)
+            if encoded.isna().any():
+                unknown = sorted(normalized[encoded.isna()].unique().tolist())
+                raise ValueError(
+                    "Unsupported PlacementStatus values: "
+                    + ", ".join(unknown)
+                )
+            df["PlacementStatus"] = encoded.astype(int)
+
+    return df
 
 
 # ─────────────────────────────────────────────────────────────────────────────
